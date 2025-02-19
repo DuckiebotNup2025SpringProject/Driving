@@ -1,0 +1,13 @@
+<launch>
+    <let name="veh" value="$(env VEH '')"/>
+
+    <node
+        namespace="$(var veh)"
+        pkg="driving_node"
+        exec="driving_node.py"
+        name="driving_node"
+        output="screen"
+    >
+    <param name="veh" value="$(var veh)" />
+    </node>
+</launch>
