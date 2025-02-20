@@ -9,7 +9,7 @@ from glob import glob
 package_name = 'driving_node'
 
 setup(
-    name=package_name,
+    name=package_name, packages=[package_name],
     version='1.0.0',
     install_requires=['setuptools'],
     data_files=[
@@ -26,7 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             # TODO: Write an console scripts for this node
-            # 'driving_node = driving_node.driving_node:main',
+            'driving_node = driving_node.driving_node:main',
         ],
     },
 )
