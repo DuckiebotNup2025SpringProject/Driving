@@ -1,7 +1,6 @@
 FROM ros:humble
 SHELL ["/bin/bash", "-c"]
 
-
 ENV ROS_DISTRO=humble
 
 ENV SOURCE_DIR=/app/driving
@@ -18,6 +17,9 @@ ENV PARALLEL_WORKERS=4
 RUN apt-get update && apt update
 
 RUN apt install python3-pip -y
+
+RUN pip3 install posix-ipc
+
 
 RUN rosdep update --rosdistro $ROS_DISTRO
 
