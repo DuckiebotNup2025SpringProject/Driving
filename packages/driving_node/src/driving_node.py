@@ -33,9 +33,10 @@ class DrivingNode(Node):
         self.dfunc = lambda x: 0
         # Initialisation of the Node
         try:
-            bot_name = os.getenv('VEH')
+            bot_name = os.getenv('VEHICLE_NAME')
         except Exception as e:
             self.get_logger().error('Bot name not specified')
+            bot_name = "duckiebot"
         super().__init__('driving_node')
         self.bot_name = bot_name
         self.motor_topic = f'/{bot_name}/wheels_cmd'
@@ -155,7 +156,6 @@ class DrivingNode(Node):
                 mask_block = mask[x_block:x_block + step, y_block:y_block + block] # cut out the block
                 yellow = np.argwhere(mask_block == 1) # TODO: Change this to the actual color of yellow
                 white = np.argwhere(mask_block == 2) # TODO: Change this to the actual color of white
-
                 # if there are more than 30% of the block in the color, then we consider that the color is present
                 if len(yellow) > block * step * 0.3:
                     y_flag = True
@@ -196,8 +196,8 @@ class DrivingNode(Node):
         g0, g1 = self.dfunc(x), self.dfunc(x + dx)
         alfa = arctan(g1) - arctan(g0)
         shoulder = dx / cos((arctan(g1) + arctan(g0)) / 2) / alfa
-        vel_left = MAX_SPEED * SPEED_KOEF * ((shoulder + BASE_WIDTH / 2) / BASE_WIDTH)
-        vel_right = MAX_SPEED * SPEED_KOEF * ((shoulder - BASE_WIDTH / 2) / BASE_WIDTH)
+        vel_left = SPEED_KOEF * ((shoulder + BASE_WIDTH / 2) / BASE_WIDTH)
+        vel_right = SPEED_KOEF * ((shoulder - BASE_WIDTH / 2) / BASE_WIDTH)
         return vel_left, vel_right
 
 def main(args=None):
