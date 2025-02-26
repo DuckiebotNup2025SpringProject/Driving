@@ -9,7 +9,7 @@ from glob import glob
 package_name = 'driving_node'
 
 setup(
-    name=package_name, packages=[package_name],
+    name=package_name,
     version='1.0.0',
     install_requires=['setuptools'],
     data_files=[
