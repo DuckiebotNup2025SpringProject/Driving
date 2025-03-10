@@ -15,7 +15,7 @@ import numpy as np
 from numpy import cos, arctan
 import argparse
 
-from duckietown_msgs.msg import WheelsCmd
+from duckietown_msgs.msg import WheelsCmdStamped
 
 # TODO: Import this constants from ROS config
 DEBUG = True                # Debug flag # TODO: Change it in Production
@@ -25,7 +25,6 @@ SPEED_KOEF = 0.7            # Relative value to motor speed. For batter performa
 MAX_SPEED = 1               # TODO: This is testing value. Change it in Production
 X_BASE, Y_BASE = 0.0, 0.0   # Base coordinates for the robot (middle of the chassis) TODO: Calculate and change it in Production
 BASE_WIDTH = 100            # Base width of the robot TODO: Calculate and change it in Production
-
 
 class DrivingNode(Node):
     def __init__(self, bot_name=None):
@@ -53,7 +52,7 @@ class DrivingNode(Node):
 
         # Set up the motors publisher
         self.motor_publisher = self.create_publisher(
-            WheelsCmd,
+            WheelsCmdStamped,
             self.motor_topic,
             1)
 
@@ -115,7 +114,7 @@ class DrivingNode(Node):
                 vel_right = -1.0
             self.get_logger().error(f'Velocity right out of range: {vel_right}')
             vel_right = max(-1.0, min(1.0, vel_right))
-        motor_msg = WheelsCmd()
+        motor_msg = WheelsCmdStamped()
         motor_msg.vel_left = float(vel_left)
         motor_msg.vel_right = float(vel_right)
         try:
