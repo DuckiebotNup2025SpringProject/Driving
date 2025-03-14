@@ -3,23 +3,20 @@ SHELL ["/bin/bash", "-c"]
 
 ENV ROS_DISTRO=humble
 
-ENV SOURCE_DIR /app/driving
-ENV ROBOT_TYPE duckiebot
-ENV ROS2_SOURCE /opt/ros/${ROS_DISTRO}/setup.sh
-ENV ROBOT_HARDWARE jetson_nano
-ENV ROBOT_CONFIGURATION DB21J
-ENV VEHICLE_NAME example_robot
-ENV PROJECT_NAME example_project
-ENV DEFAULT_LAUNCH /app/driving/launchers/default.sh
-ENV ROS_DOMAIN_ID 0
-ENV PARALLEL_WORKERS 4
+ENV SOURCE_DIR=/app/driving
+ENV ROBOT_TYPE=duckiebot
+ENV ROS2_SOURCE=/opt/ros/${ROS_DISTRO}/setup.sh
+ENV ROBOT_HARDWARE=jetson_nano
+ENV ROBOT_CONFIGURATION=DB21J
+ENV VEHICLE_NAME=duckie04
+ENV PROJECT_NAME=example_project
+ENV DEFAULT_LAUNCH=/app/driving/launchers/default.sh
+ENV ROS_DOMAIN_ID=0
+ENV PARALLEL_WORKERS=4
 
 RUN apt-get update && apt update
 
 RUN apt install python3-pip -y
-
-RUN pip3 install posix-ipc
-
 
 RUN rosdep update --rosdistro $ROS_DISTRO
 
