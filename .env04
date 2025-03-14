@@ -1,0 +1,10 @@
+export SOURCE_DIR=/app/test_segmentation
+export ROBOT_TYPE=duckiebot
+export ROS2_SOURCE=/opt/ros/${ROS_DISTRO}/setup.sh
+export ROBOT_HARDWARE=jetson_nano
+export ROBOT_CONFIGURATION=DB21J
+export VEHICLE_NAME=duckie04
+export PROJECT_NAME=example_project
+export DEFAULT_LAUNCH=/app/test_segmentation/launchers/default.sh
+export ROS_DOMAIN_ID=0
+export PARALLEL_WORKERS=4
