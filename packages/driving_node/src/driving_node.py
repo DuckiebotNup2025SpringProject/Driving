@@ -1,38 +1,48 @@
 #!/usr/bin/env python3
 import os
-from calendar import weekday
-from itertools import dropwhile
-from re import search
-from tarfile import CompressionError
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float32MultiArray
 from cv_bridge import CvBridge
-import cv2
 import numpy as np
 from scipy.interpolate import CubicSpline
-from numpy import cos, arctan
-import argparse
+from numpy import cos, sin
 
 from duckietown_msgs.msg import WheelsCmdStamped
 
+#//////////////////////////////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////////////////////////////
+#//////////////////  This is Autonomous Driving  //////////////////////////////////////
+#//////////////////////////////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////////////////////////////
+
+
 # TODO: Import this constants from ROS config
 DEBUG = True                # Debug flag # TODO: Change it in Production
-FRAMERATE = 20              # Create a reading from node if there exit a node, that is outputting it to batter performance.
+FRAMERATE = 28              # Create a reading from node if there exit a node, that is outputting it to batter performance.
 USE_MAX_SPEED = False       # This flag will mean, that speed of one of the motors will be always 1.
-SPEED_KOEF = 0.2            # Relative value to motor speed. For batter performance may be controlled through nodes
-MAX_SPEED = 1               # TODO: This is testing value. Change it in Production
-X_BASE, Y_BASE = 0.0, 0.0   # Base coordinates for the robot (middle of the chassis) TODO: Calculate and change it in Production
+MOTOR_PUB_RATE = 100        # How many times should be send motor coefficients per second
+
+X_BASE, Y_BASE = -30.0, 0.0   # Base coordinates for the robot (middle of the chassis) TODO: Calculate and change it in Production
 BASE_WIDTH = 100            # Base width of the robot TODO: Calculate and change it in Production
 
+# Vars for processing the drive function
+LOOKAHEAD = 100             # How many poits
+MAX_SPEED = 100               # TODO: This is testing value. Change it in Production
+SPEED_KOEF = 0.5            # Relative value to motor speed. For batter performance may be controlled through nodes
+ANGLE_KOEF = 1.2            # How strong will the difference in angles will be affect the rotation of the robot
+
 class DrivingNode(Node):
-    def __init__(self, bot_name=None):
+
+    # Initiation of the node and creating the subscriptions and publishers
+    def __init__(self):
         self.x = X_BASE
+        self.y = Y_BASE
+        self.theta = 0
         self.mask = None
-        self.func = lambda x: 0
-        self.dfunc = lambda x: 0
+        self.get_ahead_func = lambda x : (x + LOOKAHEAD, 0)
         # Initialisation of the Node
         try:
             bot_name = os.getenv('VEHICLE_NAME')
@@ -43,7 +53,6 @@ class DrivingNode(Node):
         self.bot_name = bot_name
         self.motor_topic = f'/{bot_name}/wheels_cmd'
         self.segmentation_topic = f'/{bot_name}/mask'
-        self.motor_coef_topic = f'/{bot_name}/mask/path/line/debug'
         self.points_topic = f'/{bot_name}/mask/debug/points'
 
         # Set up the image subscriber
@@ -60,28 +69,26 @@ class DrivingNode(Node):
             1)
 
         if DEBUG:
-            self.path_publisher = self.create_publisher(
-                Float32MultiArray,
-                self.motor_coef_topic,
-                1)
-
             self.points_pub = self.create_publisher(
                 Float32MultiArray,
                 self.points_topic,
                 1)
+
         # CV bridge for converting ROS images to OpenCV format
         self.bridge = CvBridge()
 
         # Logs about node start up
         self.get_logger().info(f'Node initialized for {bot_name}')
         self.get_logger().info(f'Subscribed to {self.segmentation_topic}')
-        self.get_logger().info(f'Publishing to {self.motor_topic}, {self.motor_coef_topic}, {self.points_topic}')
+        self.get_logger().info(f'Publishing to {self.motor_topic}, {self.points_topic}')
 
-        self.timer = self.create_timer(0.01, self.send_motor_commands)
+        self.timer = self.create_timer(1 / MOTOR_PUB_RATE, self.send_motor_commands)
 
+    # IDK why do i need this function
     def feedback_callback(self, feedback):
         self.get_logger().info('Feedback: {0}'.format(feedback.feedback.sequence))
 
+    # This is recieve the mask and saving it localy in the right format
     def mask_callback(self, msg):
         self.get_logger().info('Mask was received')
         try:
@@ -94,19 +101,22 @@ class DrivingNode(Node):
 
         self.start_moving()
 
+    # Initiation of the
     def start_moving(self):
 
         self.get_logger().info('Moving started')
         points = self.points_calc(self.mask)
         self.get_logger().info('Points were calculated')
-        self.func, self.dfunc = self.driving_fun_gen(points)
-        self.get_logger().info('Driving functions generated')
-        # Publish motor control values
-        self.get_logger().info(f'Restarting timer')
+        func = self.vector_calc(points)
+
         self.timer.cancel()
+        self.get_ahead_func = func
         self.x = X_BASE
-        self.timer = self.create_timer(0.01, self.send_motor_commands)
-        self.get_logger().info('Motor commands restarted')
+        self.y = Y_BASE
+        self.theta = 0
+        self.timer = self.create_timer(1 / MOTOR_PUB_RATE, self.send_motor_commands)
+        #TODO: Looks finished. Need Testing
+
 
     def motor_pub(self, vel_left, vel_right):
         if not (-1.0 < vel_left < 1.0):
@@ -133,54 +143,41 @@ class DrivingNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error publishing motor values: {str(e)}')
 
-    def driving_fun_gen(self, triples):
+    def vector_calc(self, points):
 
-        # Extract x, y, and weights from the triples
-        l = []
+        if len(points) <= 4:
+            return self.get_ahead_func
+
+        # Sample points defining the curve
         points_x = []
         points_y = []
-        for i in range(len(triples)):
-            points_x.append(triples[i][0])
-            points_y.append(triples[i][1])
-            l.append(triples[i][0])
-            l.append(triples[i][1])
-        msg = Float32MultiArray()
-        msg.data = l
-        self.points_pub.publish(msg)
 
-        # Create a cubic spline interpolation of the points
-        spline = CubicSpline(points_x, points_y)
+        for point in points:
+            points_x.append(point[0])
+            points_y.append(point[1])
 
-        # Define the inner function that calculates y based on x
-        def func(x):
-            return spline(x)
+        points_x = np.array(points_x)
+        points_y = np.array(points_y)
 
-        if DEBUG:
-            arr = []
-            for x in range(self.mask.shape[0]):
-                y = func(x)
-                if x < self.mask.shape[0] and abs(y) < self.mask.shape[1]:
-                    arr.append(x)
-                    arr.append(func(x))
-            massage = Float32MultiArray()
-            massage.data = arr
-            self.path_publisher.publish(massage)
-            self.get_logger().info('Path line was published')
+        coeffs = np.polyfit(points_x, points_y, 2)
+        poly_quadratic = np.poly1d(coeffs)
 
-        def dfunc(x):
-            dx = 0.0001
-            return (func(x + dx) - func(x)) / dx
+        def get_lookahead_point(x):
+            closest_x = x + LOOKAHEAD
+            return closest_x, poly_quadratic(closest_x)
 
-        return func, dfunc
+        return get_lookahead_point
 
     def send_motor_commands(self):
         self.get_logger().info('Calculating motor values')
-        vel_left, vel_right = self.calculate_motor_values(self.x)
+        vel_left, vel_right = self.calculate_motor_values()
         self.get_logger().info('Start of motor publishing')
         self.motor_pub(vel_left, vel_right)
-        self.x += MAX_SPEED * SPEED_KOEF * 0.01
         self.get_logger().info(f'Sending was successfully made  AA')
 
+
+    # THis is function, that calculates the points of the middle of the right line of the road
+    # TODO: This function should be optimized. It goes through all pixels and calculates mean of them, that is O((n * m)^2) in worth case
     def points_calc(self, mask, step=10, block = 7):
         points = []
 
@@ -255,17 +252,51 @@ class DrivingNode(Node):
                 #self.get_logger().info(f'Not enough data in line to find center of road. Line {iter}')
                 continue
 
+        try:
+            self.get_logger().info(f'Found {len(points)} points')
+            if len(points) < 2:
+                point_for_pub = []
+                for point in points:
+                    point_for_pub.append(float(point[0]))
+                    point_for_pub.append(float(point[1]))
+
+                msg = Float32MultiArray()
+                msg.data = point_for_pub
+                self.points_pub.publish(msg)
+        except Exception as e:
+            self.get_logger().error(f'Error publishing points: {str(e)}')
+
         return points
 
-    def calculate_motor_values(self, x):
-        dx = MAX_SPEED * SPEED_KOEF / FRAMERATE
-        g0, g1 = self.dfunc(x), self.dfunc(x + dx)
-        alfa = arctan(g1) - arctan(g0)
-        if cos((arctan(g1) + arctan(g0)) / 2) * alfa <= 0.0001:
+    def calculate_motor_values(self):
+        dt = 1 / MOTOR_PUB_RATE
+
+        lookahead_x, lookahead_y = self.get_ahead_func(self.x)
+
+        # Calculate steering angle
+        angle_to_target = np.arctan2(lookahead_y - self.y, lookahead_x - self.x)
+        steering_angle = (angle_to_target - self.theta) * ANGLE_KOEF
+
+        if abs(self.x) > 500:
+            return 0, 0
+
+        if abs(steering_angle) < 0.001:
+            self.x += MAX_SPEED * SPEED_KOEF * cos(self.theta) * dt
+            self.y += MAX_SPEED * SPEED_KOEF * sin(self.theta) * dt
             return SPEED_KOEF, SPEED_KOEF
-        shoulder = dx / cos((arctan(g1) + arctan(g0)) / 2) / alfa
-        vel_left = SPEED_KOEF * ((shoulder + BASE_WIDTH / 2) / BASE_WIDTH)
-        vel_right = SPEED_KOEF * ((shoulder - BASE_WIDTH / 2) / BASE_WIDTH)
+
+
+        shoulder = MAX_SPEED * SPEED_KOEF / (steering_angle)
+
+        # Move the robot
+        self.x += shoulder * (sin(self.theta + steering_angle) - sin(self.theta))
+        self.y -= shoulder * (cos(self.theta + steering_angle) - cos(self.theta))
+
+        self.theta += steering_angle  # Adjust heading smoothly
+
+        vel_left = SPEED_KOEF * ((shoulder + BASE_WIDTH / 2) / shoulder)
+        vel_right = SPEED_KOEF * ((shoulder - BASE_WIDTH / 2) / shoulder)
+
         return vel_left, vel_right
 
 def main(args=None):
