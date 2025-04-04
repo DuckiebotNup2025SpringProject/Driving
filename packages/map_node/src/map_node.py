@@ -1,0 +1,155 @@
+#!/bin/python3
+import os
+
+import apriltag
+import cv2
+import numpy as np
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import CompressedImage
+import networkx as nx
+from std_msgs.msg import Int64
+
+
+class MapNode(Node):
+    def __init__(self, bot_name=None):
+        try:
+            bot_name = os.getenv('VEHICLE_NAME')
+        except Exception:
+            self.get_logger().error('Bot name not specified')
+            bot_name = "example_robot"
+        super().__init__('map_node')
+        self.bot_name = bot_name
+        self.apriltag_topic = f'/{bot_name}/image/compressed'
+        self.actual_tag = 0
+
+        self.apriltag_subscription = self.create_subscription(
+            Int64,
+            self.apriltag_topic,
+            self.parse_tag,
+            10)
+
+        self.timer = self.create_timer(5, lambda: self.find_intersection_by_tag(self.actual_tag))
+
+
+        self.town_map = nx.Graph()
+
+        self.town_map.add_node('A', tags=[148, 145, 146, 151])
+        self.town_map.add_node('B', tags=[147, 137, 0, 160])
+        self.town_map.add_node('C', tags=[149, 141, 0, 156])
+        self.town_map.add_node('D', tags=[238, 0, 161, 243])
+        self.town_map.add_node('E', tags=[245, 246, 244, 0])
+        self.town_map.add_node('F', tags=[235, 0, 240, 239])
+        self.town_map.add_node('G', tags=[237, 236, 136, 0])
+        self.town_map.add_node('H', tags=[0, 0, 133, 0])
+        self.town_map.add_node('I', tags=[0, 0, 241, 0])
+        self.town_map.add_node('J', tags=[134, 0, 159, 150])
+        self.town_map.add_node('K', tags=[0, 0, 260, 0])
+
+        self.town_map.add_edge('A', 'E', first_tag='151', second_tag='246')
+        self.town_map.add_edge('C', 'E', first_tag='149', second_tag='244')
+        self.town_map.add_edge('B', 'C', first_tag='160', second_tag='141')
+        self.town_map.add_edge('A', 'B', first_tag='146', second_tag='147')
+        self.town_map.add_edge('B', 'J', first_tag='137', second_tag='159')
+        self.town_map.add_edge('A', 'J', first_tag='145', second_tag='150')
+        self.town_map.add_edge('D', 'J', first_tag='161', second_tag='134')
+        self.town_map.add_edge('D', 'H', first_tag='243', second_tag='133')
+        self.town_map.add_edge('A', 'I', first_tag='148', second_tag='241')
+        self.town_map.add_edge('D', 'G', first_tag='238', second_tag='236')
+        self.town_map.add_edge('G', 'F', first_tag='136', second_tag='235')
+        self.town_map.add_edge('E', 'F', first_tag='245', second_tag='240')
+        self.town_map.add_edge('C', 'F', first_tag='156', second_tag='239')
+        self.town_map.add_edge('G', 'K', first_tag='237', second_tag='260')
+
+    def parse_tag(self, msg):
+        try:
+            tag = np.frombuffer(msg.data, int)
+            if msg is None:
+                return
+            self.actual_tag = tag
+        except Exception:
+            self.get_logger().error("Error parsing tag")
+
+    def find_edge_by_tag(self, graph, tag_value):
+        tag_str = str(tag_value)
+
+        for u, v, attrs in graph.edges(data=True):
+            found_vertices = []
+            if attrs.get('first_tag') == tag_str:
+                found_vertices.append(u)
+            if attrs.get('second_tag') == tag_str:
+                found_vertices.append(v)
+            if found_vertices:
+                return (u, v), found_vertices
+
+        return None, None
+
+    def find_edges_from_vertex(self, graph, vertex):
+        vertex_tags = graph.nodes[vertex].get('tags', [])
+        result = {}
+
+        for tag in vertex_tags:
+            tag_str = str(tag)
+            matches = []
+            for u, v, attrs in graph.edges(vertex, data=True):
+                if attrs.get('first_tag') == tag_str or attrs.get('second_tag') == tag_str:
+                    adjacent = v if u == vertex else u
+                    matches.append(((u, v), adjacent))
+            result[tag] = matches if matches else None
+
+        return result
+
+    def compute_turns(self, vertex, incoming_tag):
+        tags = self.town_map.nodes[vertex].get('tags', [])
+        try:
+            i = tags.index(incoming_tag)
+        except ValueError:
+            self.get_logger().info(f"Error: the incoming tag {incoming_tag} was not found in vertex {vertex}!")
+            return None
+
+        turns = {
+            0: tags[(i + 2) % 4],
+            90: tags[(i + 3) % 4],
+            180: tags[i],
+            270: tags[(i + 1) % 4]
+        }
+        return turns
+
+    def find_intersection_by_tag(self, tag_to_find):
+
+        edge, vertices_with_tag = self.find_edge_by_tag(self.town_map, tag_to_find)
+
+        if edge:
+            selected_vertex = vertices_with_tag[0]
+            incoming_tag = int(tag_to_find)
+            turns = self.compute_turns(selected_vertex, incoming_tag)
+            edges_mapping = self.find_edges_from_vertex(self.town_map, selected_vertex)
+            self.get_logger().info(
+                f"\nYou have arrived at intersection {selected_vertex} via road {edge}. From this intersection, you can proceed to the following:")
+
+            for tag, infos in edges_mapping.items():
+                if infos is not None:
+                    turn_angle = None
+                    for angle, t in turns.items():
+                        if t == tag:
+                            turn_angle = angle
+                            break
+                    for edge_info in infos:
+                        edge_data, adjacent = edge_info
+                        if turn_angle is not None:
+                            self.get_logger().info(
+                                f"Tag {tag} leads to intersection {adjacent} - turn {turn_angle} degrees clockwise.")
+        else:
+            self.get_logger().error(f"No edge with tag {tag_to_find} was found.")
+
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    map_processor = MapNode()
+    rclpy.spin(map_processor)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
