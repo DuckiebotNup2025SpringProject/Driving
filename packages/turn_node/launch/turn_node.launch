@@ -1,0 +1,13 @@
+<launch>
+    <let name="veh" value="$(env VEH '')"/>
+
+    <node
+        namespace="$(var veh)"
+        pkg="turn_node"
+        exec="turn_node.py"
+        name="turn_node"
+        output="screen"
+    >
+    <param name="veh" value="$(var veh)" />
+    </node>
+</launch>

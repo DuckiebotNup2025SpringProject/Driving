@@ -1,0 +1,13 @@
+<launch>
+    <let name="veh" value="$(env VEH '')"/>
+
+    <node
+        namespace="$(var veh)"
+        pkg="wheels_encoder_reader_node"
+        exec="wheels_encoder_reader_node.py"
+        name="wheels_encoder_reader_node"
+        output="screen"
+    >
+    <param name="veh" value="$(var veh)" />
+    </node>
+</launch>

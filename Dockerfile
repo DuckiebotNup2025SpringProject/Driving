@@ -35,4 +35,7 @@ RUN apt install nano -y
 RUN source ${ROS2_SOURCE} && colcon build --parallel-workers ${PARALLEL_WORKERS}
 
 COPY ./scripts /app/
+COPY entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/install/turn_node/lib/turn_node/turn_node.py
 ENTRYPOINT ["./entrypoint.sh"]
