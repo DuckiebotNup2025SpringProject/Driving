@@ -7,7 +7,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
-from std_msgs.msg import Int64
+from std_msgs.msg import String
 
 
 class AprilTagNode(Node):
@@ -20,7 +20,7 @@ class AprilTagNode(Node):
         super().__init__('apriltag_node')
         self.bot_name = bot_name
         self.image_topic = f'/{bot_name}/image/compressed'
-        self.apriltag_topic = f'/{bot_name}/image/compressed'
+        self.apriltag_topic = f'/{bot_name}/apriltag'
 
         self.image_subscription = self.create_subscription(
             CompressedImage,
@@ -29,7 +29,7 @@ class AprilTagNode(Node):
             10)
 
         self.apriltag_publisher = self.create_publisher(
-            Int64,
+            String,
             self.apriltag_topic,
             10)
 
@@ -83,9 +83,10 @@ class AprilTagNode(Node):
                 distance_mm = (focal_length_mm * tag_size_mm) / tag_width_pixels
                 self.get_logger().info("Distance to tag: " + str(distance_mm) + " mm")
                 if distance_mm < 700:
-                    msg = Int64()
-                    msg.data = int(tag.tag_id)
+                    msg = String()
+                    msg.data = str(tag.tag_id)
                     self.apriltag_publisher.publish(msg)
+                    self.get_logger().info("Tag otpravlen")
 
             self.get_logger().info("Detection completed successfully")
 

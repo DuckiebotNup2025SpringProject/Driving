@@ -7,6 +7,9 @@
   <maintainer email="artem.s.grigorash@gmail.com">Artem.Grigorash</maintainer>
   <license>MIT</license>
 
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>python3-opencv</depend>

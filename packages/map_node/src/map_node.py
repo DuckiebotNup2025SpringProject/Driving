@@ -8,7 +8,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
 import networkx as nx
-from std_msgs.msg import Int64
+from std_msgs.msg import String
 
 
 class MapNode(Node):
@@ -20,15 +20,16 @@ class MapNode(Node):
             bot_name = "example_robot"
         super().__init__('map_node')
         self.bot_name = bot_name
-        self.apriltag_topic = f'/{bot_name}/image/compressed'
-        self.actual_tag = 0
+        self.apriltag_topic = f'/{bot_name}/apriltag'
+        self.actual_tag = 243
 
         self.apriltag_subscription = self.create_subscription(
-            Int64,
+            String,
             self.apriltag_topic,
             self.parse_tag,
             10)
 
+        self.get_logger().info('Bot name: ' + bot_name)
         self.timer = self.create_timer(5, lambda: self.find_intersection_by_tag(self.actual_tag))
 
 
@@ -63,10 +64,10 @@ class MapNode(Node):
 
     def parse_tag(self, msg):
         try:
-            tag = np.frombuffer(msg.data, int)
+            tag = msg.data
             if msg is None:
                 return
-            self.actual_tag = tag
+            self.actual_tag = int(tag)
         except Exception:
             self.get_logger().error("Error parsing tag")
 
@@ -118,7 +119,7 @@ class MapNode(Node):
     def find_intersection_by_tag(self, tag_to_find):
 
         edge, vertices_with_tag = self.find_edge_by_tag(self.town_map, tag_to_find)
-
+        self.get_logger().info("INFO FOR TAG " + str(tag_to_find) + "___________________________________________________")
         if edge:
             selected_vertex = vertices_with_tag[0]
             incoming_tag = int(tag_to_find)
