@@ -2,6 +2,7 @@
 import os
 
 import rclpy
+from numpy.ma.core import argmin
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float32MultiArray
@@ -31,8 +32,10 @@ BASE_WIDTH = 100            # Base width of the robot TODO: Calculate and change
 # Vars for processing the drive function
 LOOKAHEAD = 100             # How many poits
 MAX_SPEED = 100               # TODO: This is testing value. Change it in Production
-SPEED_KOEF = 0.5            # Relative value to motor speed. For batter performance may be controlled through nodes
-ANGLE_KOEF = 1.2            # How strong will the difference in angles will be affect the rotation of the robot
+SPEED_KOEF = 0.4            # Relative value to motor speed. For batter performance may be controlled through nodes
+ANGLE_KOEF = 0.5            # How strong will the difference in angles will be affect the rotation of the robot
+
+ROAD_SIZE = 10
 
 class DrivingNode(Node):
 
@@ -175,19 +178,60 @@ class DrivingNode(Node):
         self.motor_pub(vel_left, vel_right)
         self.get_logger().info(f'Sending was successfully made  AA')
 
+    def _oneline(self, x, y, slope, ratio):
+        dx, dy = 1, slope
+        norm = np.hypot(dx, dy)
+        dx /= norm
+        dy /= norm
+
+        p1 = (x + dx * ROAD_SIZE * ratio, y + dy * ROAD_SIZE * ratio)
+        p2 = (x - dx * ROAD_SIZE * ratio, y - dy * ROAD_SIZE * ratio)
+        point_on_normal = p1 if p1[1] > p2[1] else p2
+        return point_on_normal
+
+    def mid_calc(self, poly1, x, poly2 = None, ratio=0.5):
+        y = poly1(x)
+        d_poly1 = poly1.deriv()
+        slope_tangent = d_poly1(x)
+        if np.isclose(slope_tangent, 0.0):
+            if poly2 is None:
+                return x, y + ROAD_SIZE * ratio
+            return x, (y * ratio + (1 - ratio) * poly2(x))
+
+        slope_normal = -1 / slope_tangent
+        b = y - slope_normal * x
+        norm_line = np.poly1d([slope_normal, b])
+
+        if poly2 is None:
+            return self._oneline(x, y, slope_normal, ratio)
+
+        h = norm_line - poly2
+        intersect = h.r
+        if np.iscomplex(intersect).any():
+            self.get_logger().error('Complex intersection')
+            return self._oneline(x, y, slope_normal, ratio)
+        self.get_logger().info(f'Intersection var type {type(intersect)}')
+        self.get_logger().info(f'Intersection between polynomials: {intersect}')
+        dist = [abs(np.hypot(x0 - x, y0 - y) - ROAD_SIZE) for x0, y0 in [intersect]]
+        if not intersect.any():
+            return self._oneline(x, y, slope_normal, ratio)
+        argmin = np.argmin(dist)
+        closest = [intersect][argmin]
+
+        return x * ratio + closest[0] * (1 - ratio), y * ratio + closest[1] * (1 - ratio)
+
 
     # THis is function, that calculates the points of the middle of the right line of the road
     # TODO: This function should be optimized. It goes through all pixels and calculates mean of them, that is O((n * m)^2) in worth case
     def points_calc(self, mask, step=10, block = 7):
+        y_line = []
+        wr_line = []
+        wl_line = []
+
         points = []
 
         # mask shape
         height, width = mask.shape[:2]
-
-        # two initial points (for start and vector direction)
-        points.append((X_BASE, Y_BASE, 1000000))
-        points.append((X_BASE + 0.1, Y_BASE, 1000000))
-        points.append((X_BASE + 2, Y_BASE, 100))
 
         #search in the mask by lines with step = step
         iter = -1
@@ -226,45 +270,77 @@ class DrivingNode(Node):
 
             yellow_center = np.mean(yellow_line, axis=0)
             #find id of the line where we are
-            iter += 1
-            if y_flag and (wl_flag or wr_flag): #when we found a yellow line and one of the white lines
-                if wr_flag: #default search
-                    #self.get_logger().info(f'Calculating path based on yellow and right border {yellow_center[1]} {white_right_center[1]}')
-                    x, y = ((yellow_center[0] + white_right_center[0]) / 2,
-                            (yellow_center[1] + white_right_center[1]) / 2)
-                    #points.append((yellow_center[0], yellow_center[1], 0))
-                    #points.append((white_right_center[0], white_right_center[1], 0))
-                else: #search based on left border and yellow line
-                    #self.get_logger().info('Calculating path based on yellow and left border')
-                    x, y = ((yellow_center[0] * 3 - white_left_center[0]) / 2,
-                            (yellow_center[1] * 3 - white_left_center[1]) / 2)
-                    #points.append((yellow_center[0], yellow_center[1], 0))
-                    #points.append((white_left_center[0], white_left_center[1], 0))
-                points.append((x, y, 10))
-            elif wl_flag and wr_flag: #search based on two borders (not accurate at all. May be deleted for accuracy)
-                #self.get_logger().info('Calculating path based on the borders')
-                x, y = ((white_left_center[0] + white_right_center[0] * 3) / 4,
-                        (white_left_center[1] + white_right_center[1] * 3) / 4)
-                #points.append((white_left_center[0], white_left_center[1], 0))
-                #points.append((white_right_center[0], white_right_center[1], 0))
-                points.append((x, y, 10))
+
+            if y_flag: y_line.append(yellow_center)
+            if wl_flag: wl_line.append(white_left_center)
+            if wr_flag: wr_line.append(white_right_center)
+
+        # TODO: Implement translation to the normal coordinates
+
+        global y_poly
+        global wl_poly
+        global wr_poly
+        y_flag = False
+        wl_flag = False
+        wr_flag = False
+        if len(y_line) >= 5:
+            y_coeffs = np.polyfit(np.array(y_line)[:, 0], np.array(y_line)[:, 1], 2)
+            y_poly = np.poly1d(y_coeffs)
+            y_flag = True
+        if len(wl_line) >= 5:
+            wl_coeffs = np.polyfit(np.array(wl_line)[:, 0], np.array(wl_line)[:, 1], 2)
+            wl_poly = np.poly1d(wl_coeffs)
+            wl_flag = True
+        if len(wr_line) >= 5:
+            wr_coeffs = np.polyfit(np.array(wr_line)[:, 0], np.array(wr_line)[:, 1], 2)
+            wr_poly = np.poly1d(wr_coeffs)
+            wr_flag = True
+
+        if not (y_flag or wl_flag or wr_flag):
+            self.get_logger().info('No lines were found')
+            return []
+
+        if y_flag:
+            dy_poly = y_poly.deriv()
+        if wl_flag:
+            dwl_poly = wl_poly.deriv()
+        if wr_flag:
+            dwr_poly = wr_poly.deriv()
+
+        for x1 in range (0, height, 20):
+            if y_flag:
+                if wl_flag:
+                    points.append(self.mid_calc(y_poly, x1, wl_poly, ratio=0.5))
+
+                elif wr_flag:
+                    points.append(self.mid_calc(y_poly, x1, wr_poly, ratio=1.5))
+
+                else:
+                    points.append(self.mid_calc(y_poly, x1, ratio=0.5))
+
+            elif wl_flag:
+                if wr_flag:
+                    points.append(self.mid_calc(wl_poly, x1, wr_poly, ratio=0.75))
+                else:
+                    points.append(self.mid_calc(wl_poly, x1, ratio=-0.5))
+
+            elif wr_flag:
+                points.append(self.mid_calc(wr_poly, x1, ratio=1.5))
+
             else:
-                #self.get_logger().info(f'Not enough data in line to find center of road. Line {iter}')
-                continue
+                self.get_logger().info('No lines were found')
 
-        try:
-            self.get_logger().info(f'Found {len(points)} points')
-            if len(points) < 2:
-                point_for_pub = []
-                for point in points:
-                    point_for_pub.append(float(point[0]))
-                    point_for_pub.append(float(point[1]))
+        self.get_logger().info(f'Found {len(points)} points')
+        if len(points) > 2:
+            point_for_pub = []
+            for point in points:
+                point_for_pub.append(float(point[0]))
+                point_for_pub.append(float(point[1]))
 
-                msg = Float32MultiArray()
-                msg.data = point_for_pub
-                self.points_pub.publish(msg)
-        except Exception as e:
-            self.get_logger().error(f'Error publishing points: {str(e)}')
+            msg = Float32MultiArray()
+            msg.data = point_for_pub
+            self.points_pub.publish(msg)
+
 
         return points
 
