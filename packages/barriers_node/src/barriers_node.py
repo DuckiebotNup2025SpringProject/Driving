@@ -4,6 +4,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage, Range
 from duckietown_msgs.msg import BoolStamped
+import os
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -17,7 +18,11 @@ class BarriersNode(Node):
         super().__init__('traffic_lights_node')
         if bot_name is None:
             self.get_logger().error('Bot name not specified')
-        self.bot_name = bot_name
+        try:
+            self.bot_name = os.getenv('VEHICLE_NAME')
+        except Exception as e:
+            self.get_logger().error('Bot name not specified')
+            self.bot_name = bot_name
         self.ToF_topic = f'/{bot_name}/range'
         self.emergency_stop_topic = f'/{bot_name}/emergency_stop'
         self.stop_tof = False
