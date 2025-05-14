@@ -1,18 +1,14 @@
 #!/bin/python3
 import os
 
-import apriltag
-import cv2
-import numpy as np
+import networkx as nx
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import CompressedImage
-import networkx as nx
 from std_msgs.msg import String
 
 
 class MapNode(Node):
-    def __init__(self, bot_name=None):
+    def __init__(self):
         try:
             bot_name = os.getenv('VEHICLE_NAME')
         except Exception:

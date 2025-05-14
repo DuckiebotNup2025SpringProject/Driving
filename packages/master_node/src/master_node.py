@@ -1,15 +1,11 @@
 #!/bin/python3
 import os
+from collections import deque
+from enum import Enum
 
-import apriltag
-import cv2
-import numpy as np
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
-from enum import Enum
-from collections import deque
 
 
 class DrivingMode(Enum):
@@ -25,7 +21,7 @@ class Target(Enum):
 
 
 class MasterNode(Node):
-    def __init__(self, bot_name=None):
+    def __init__(self):
         try:
             bot_name = os.getenv('VEHICLE_NAME')
         except Exception:
@@ -36,6 +32,7 @@ class MasterNode(Node):
         self.master_commands_topic = f'/{bot_name}/master_commands'
         self.master_callbacks_topic = f'/{bot_name}/master_callbacks'
         self.route_topic = f'/{bot_name}/route'
+        self.apriltag_topic = f'/{bot_name}/apriltag'
 
         self.mode = DrivingMode.MANUAL
         self.target = Target.MOVING
@@ -59,6 +56,12 @@ class MasterNode(Node):
             self.add_route,
             10)
 
+        self.apriltag_subscription = self.create_subscription(
+            String,
+            self.apriltag_topic,
+            self.parse_tag,
+            10)
+
         self.master_publisher = self.create_publisher(
             String,
             self.master_commands_topic,
@@ -66,7 +69,16 @@ class MasterNode(Node):
 
         self.action_timer = self.create_timer(0.1, lambda: self.action())
 
-    def add_route(self,msg):
+    def parse_tag(self, msg):
+        try:
+            tag = msg.data
+            if msg is None:
+                return
+            self.last_apriltag = str(tag)
+        except Exception:
+            self.get_logger().error("Error parsing tag")
+
+    def add_route(self, msg):
         self.tasks_list = deque(msg.data.split(','))
         self.mode = DrivingMode.AUTONOMOUS
 
@@ -74,14 +86,18 @@ class MasterNode(Node):
         if self.mode == DrivingMode.AUTONOMOUS:
             if self.target == Target.MOVING:
                 msg = String()
-                msg.data = str("STRAIGHT")
+                msg.data = "STRAIGHT"
                 self.master_publisher.publish(msg)
                 self.target = Target.PAUSED
             elif self.target == Target.TURNING:
-                self.master_publisher.publish("TURN" + self.turning_angle)
+                msg = String()
+                msg.data = "TURN" + self.turning_angle
+                self.master_publisher.publish(msg)
                 self.target = Target.PAUSED
             elif self.target == Target.TRAFFIC_LIGHTING:
-                self.master_publisher.publish("TRAFFIC")
+                msg = String()
+                msg.data = "TRAFFIC"
+                self.master_publisher.publish(msg)
                 self.target = Target.PAUSED
             elif self.target == Target.PAUSED:
                 pass
