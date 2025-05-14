@@ -57,7 +57,7 @@ class MapNode(Node):
 
     def send_route(self):
         msg = String()
-        msg.data = ",".join(self.route)
+        msg.data = self.run_navigation()
         self.route_publisher.publish(msg)
 
     def parse_tag(self, msg):
@@ -206,21 +206,7 @@ class MapNode(Node):
         print("\nGenerated command sequence:")
         for cmd in plan:
             print(cmd)
-        print()
-
-        step = 0
-        while step < len(plan):
-            expected = plan[step]
-            last_action = input(f"[step {step}] Enter last_action (expected {expected}): ").strip()
-            if last_action == expected:
-                step += 1
-                if step < len(plan):
-                    next_action = plan[step]
-                    print("next_action =", next_action)
-                else:
-                    print("Mission complete!")
-            else:
-                print(f"Error: expected '{expected}', but got '{last_action}'. Retrying...")
+        return ",".join(plan)
 
 
 def main(args=None):
