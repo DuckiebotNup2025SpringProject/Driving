@@ -17,12 +17,18 @@ class MapNode(Node):
         super().__init__('map_node')
         self.bot_name = bot_name
         self.apriltag_topic = f'/{bot_name}/apriltag'
+        self.route_topic = f'/{bot_name}/route'
         self.actual_tag = 243
 
         self.apriltag_subscription = self.create_subscription(
             String,
             self.apriltag_topic,
             self.parse_tag,
+            10)
+
+        self.route_publisher = self.create_publisher(
+            String,
+            self.route_topic,
             10)
 
         self.get_logger().info('Bot name: ' + bot_name)
@@ -34,30 +40,25 @@ class MapNode(Node):
 
         self.town_map.add_node('A', tags=[148, 145, 146, 151])
         self.town_map.add_node('B', tags=[147, 137, 0, 160])
-        self.town_map.add_node('C', tags=[149, 141, 0, 156])
-        self.town_map.add_node('D', tags=[238, 0, 161, 243])
-        self.town_map.add_node('E', tags=[245, 246, 244, 0])
-        self.town_map.add_node('F', tags=[235, 0, 240, 239])
-        self.town_map.add_node('G', tags=[237, 236, 136, 0])
-        self.town_map.add_node('H', tags=[0, 0, 133, 0])
-        self.town_map.add_node('I', tags=[0, 0, 241, 0])
-        self.town_map.add_node('J', tags=[134, 0, 159, 150])
-        self.town_map.add_node('K', tags=[0, 0, 260, 0])
+        self.town_map.add_node('J', tags=[134, 0, 159, 243])
+        self.town_map.add_node('D', tags=[0, 156, 149, 238])
+        self.town_map.add_node('E', tags=[245, 150, 244, 0])
 
-        self.town_map.add_edge('A', 'E', first_tag='151', second_tag='246')
-        self.town_map.add_edge('C', 'E', first_tag='149', second_tag='244')
-        self.town_map.add_edge('B', 'C', first_tag='160', second_tag='141')
+        self.town_map.add_edge('A', 'E', first_tag='151', second_tag='150')
+        self.town_map.add_edge('A', 'D', first_tag='148', second_tag='149')
+        self.town_map.add_edge('A', 'J', first_tag='145', second_tag='243')
         self.town_map.add_edge('A', 'B', first_tag='146', second_tag='147')
-        self.town_map.add_edge('B', 'J', first_tag='137', second_tag='159')
-        self.town_map.add_edge('A', 'J', first_tag='145', second_tag='150')
-        self.town_map.add_edge('D', 'J', first_tag='161', second_tag='134')
-        self.town_map.add_edge('D', 'H', first_tag='243', second_tag='133')
-        self.town_map.add_edge('A', 'I', first_tag='148', second_tag='241')
-        self.town_map.add_edge('D', 'G', first_tag='238', second_tag='236')
-        self.town_map.add_edge('G', 'F', first_tag='136', second_tag='235')
-        self.town_map.add_edge('E', 'F', first_tag='245', second_tag='240')
-        self.town_map.add_edge('C', 'F', first_tag='156', second_tag='239')
-        self.town_map.add_edge('G', 'K', first_tag='237', second_tag='260')
+        self.town_map.add_edge('B', 'E', first_tag='160', second_tag='244')
+        self.town_map.add_edge('E', 'D', first_tag='245', second_tag='238')
+        self.town_map.add_edge('J', 'D', first_tag='134', second_tag='156')
+        self.town_map.add_edge('J', 'B', first_tag='159', second_tag='137')
+
+        self.send_route()
+
+    def send_route(self):
+        msg = String()
+        msg.data = ",".join(self.route)
+        self.route_publisher.publish(msg)
 
     def parse_tag(self, msg):
         try:
@@ -187,8 +188,8 @@ class MapNode(Node):
         3) Constructs the route and outputs the sequence of commands.
         4) Monitors execution, expecting exact reports for each command.
         """
-        destination = input("Enter destination vertex (e.g. 'K'): ").strip()
-        last_action = input("Enter initial last_action (must start with 'S', e.g. S121): ").strip()
+        destination = "K"
+        last_action = "S" + str(self.actual_tag)
         if not last_action.startswith("S"):
             print("Error: the first action must be a stop report 'S<tag>'")
             return

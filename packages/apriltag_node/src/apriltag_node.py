@@ -33,13 +33,11 @@ class AprilTagNode(Node):
             self.apriltag_topic,
             10)
 
-
-
         self.get_logger().info(f'Node initialized for {bot_name}')
         self.get_logger().info(f'Publishing to {self.apriltag_topic}')
         self.actual_image = 0
 
-        self.timer = self.create_timer(3, lambda: self.get_result(self.actual_image))
+        self.timer = self.create_timer(1, lambda: self.get_result(self.actual_image))
 
     def parse_apriltag(self, msg):
         try:
@@ -75,6 +73,7 @@ class AprilTagNode(Node):
             focal_length_mm = 300
             tag_size_mm = 65
 
+            tags = {}
             # Display information about the detected tags
             for tag in results:
                 self.get_logger().info("------------------------------------------------")
@@ -83,11 +82,10 @@ class AprilTagNode(Node):
                 distance_mm = (focal_length_mm * tag_size_mm) / tag_width_pixels
                 self.get_logger().info("Distance to tag: " + str(distance_mm) + " mm")
                 if distance_mm < 700:
-                    msg = String()
-                    msg.data = str(tag.tag_id)
-                    self.apriltag_publisher.publish(msg)
-                    self.get_logger().info("Tag otpravlen")
-
+                    tags[tag.tag_id] = distance_mm
+            msg = String()
+            msg.data = str(min(tags, key=tags.get))
+            self.apriltag_publisher.publish(msg)
             self.get_logger().info("Detection completed successfully")
 
 
