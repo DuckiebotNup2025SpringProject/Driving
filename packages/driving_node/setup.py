@@ -10,6 +10,8 @@ package_name = 'driving_node'
 
 setup(
     name=package_name,
+    packages=["calibration"],
+    package_dir={'': 'include'},
     version='1.0.0',
     install_requires=['setuptools'],
     data_files=[
