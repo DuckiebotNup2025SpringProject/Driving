@@ -14,7 +14,7 @@ setup(
         ('share/' + package_name + '/src', glob('src/*.py')),
         ('lib/' + package_name, glob('src/*.py'))
     ],
-    description='Node for apriltag parsing',
+    description='Main node for controlling all other nodes',
     author='Artem Grigorash',
     author_email='artem.s.grigorash@gmail.com',
     license='GPLv3',
