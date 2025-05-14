@@ -1,0 +1,3 @@
+bool data
+---
+std_msgs/String signal_json

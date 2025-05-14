@@ -1,0 +1,13 @@
+<launch>
+    <let name="veh" value="$(env VEH '')"/>
+
+    <node
+        namespace="$(var veh)"
+        pkg="barriers_node"
+        exec="barriers_node.py"
+        name="barriers_node"
+        output="screen"
+    >
+    <param name="veh" value="$(var veh)" />
+    </node>
+</launch>
