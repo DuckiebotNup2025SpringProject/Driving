@@ -32,6 +32,7 @@ class MapNode(Node):
         self.get_logger().info('Bot name: ' + bot_name)
         self.timer = self.create_timer(5, lambda: self.find_intersection_by_tag(self.actual_tag))
 
+        self.route = "AF"
 
         self.town_map = nx.Graph()
 
@@ -73,7 +74,6 @@ class MapNode(Node):
 
     def find_edge_by_tag(self, graph, tag_value):
         tag_str = str(tag_value)
-
         for u, v, attrs in graph.edges(data=True):
             found_vertices = []
             if attrs.get('first_tag') == tag_str:
@@ -117,9 +117,9 @@ class MapNode(Node):
         return turns
 
     def find_intersection_by_tag(self, tag_to_find):
-
         edge, vertices_with_tag = self.find_edge_by_tag(self.town_map, tag_to_find)
-        self.get_logger().info("INFO FOR TAG " + str(tag_to_find) + "___________________________________________________")
+        self.get_logger().info(
+            "INFO FOR TAG " + str(tag_to_find) + "___________________________________________________")
         if edge:
             selected_vertex = vertices_with_tag[0]
             incoming_tag = int(tag_to_find)
@@ -143,6 +143,87 @@ class MapNode(Node):
         else:
             self.get_logger().error(f"No edge with tag {tag_to_find} was found.")
 
+    def find_shortest_path_instructions(self, graph, start, end):
+        """
+        Returns a list of commands for the robot:
+          "T<angle>" — turn by <angle> degrees,
+          "S<tag>"   — drive until encountering tag <tag> at the next intersection.
+        """
+        if start not in graph.nodes:
+            raise ValueError(f"Node '{start}' not found")
+        if end not in graph.nodes:
+            raise ValueError(f"Node '{end}' not found")
+
+        path = nx.shortest_path(graph, source=start, target=end, weight='weight')
+        actions = []
+        incoming_tag = None
+
+        for u, v in zip(path, path[1:]):
+            attrs = graph[u][v]
+            # Determine which tag is on the u side and which on the v side
+            if str(attrs['first_tag']) in map(str, graph.nodes[u]['tags']):
+                depart_tag = int(attrs['first_tag'])
+                arrive_tag = int(attrs['second_tag'])
+            else:
+                depart_tag = int(attrs['second_tag'])
+                arrive_tag = int(attrs['first_tag'])
+
+            # 1) Turn
+            if incoming_tag is None:
+                angle = 0
+            else:
+                turns = self.compute_turns(u, incoming_tag)
+                angle = next((ang for ang, t in turns.items() if t == depart_tag), 0)
+            actions.append(f"T{angle}")
+
+            # 2) Drive to the tag on the far side
+            actions.append(f"S{arrive_tag}")
+
+            incoming_tag = arrive_tag
+
+        return actions
+
+    def run_navigation(self):
+        """
+        Main function to run the robot navigation:
+        1) Reads the destination vertex.
+        2) Receives the initial stop report S<tag> indicating the current location.
+        3) Constructs the route and outputs the sequence of commands.
+        4) Monitors execution, expecting exact reports for each command.
+        """
+        destination = input("Enter destination vertex (e.g. 'K'): ").strip()
+        last_action = input("Enter initial last_action (must start with 'S', e.g. S121): ").strip()
+        if not last_action.startswith("S"):
+            print("Error: the first action must be a stop report 'S<tag>'")
+            return
+
+        tag_value = int(last_action[1:])
+        edge, vertices = self.find_edge_by_tag(self.town_map, tag_value)
+        if edge is None:
+            print(f"No edge with tag {tag_value} was found!")
+            return
+        current_vertex = vertices[0]
+        print(f"Detected current location: {current_vertex}")
+
+        plan = self.find_shortest_path_instructions(self.town_map, current_vertex, destination)
+        print("\nGenerated command sequence:")
+        for cmd in plan:
+            print(cmd)
+        print()
+
+        step = 0
+        while step < len(plan):
+            expected = plan[step]
+            last_action = input(f"[step {step}] Enter last_action (expected {expected}): ").strip()
+            if last_action == expected:
+                step += 1
+                if step < len(plan):
+                    next_action = plan[step]
+                    print("next_action =", next_action)
+                else:
+                    print("Mission complete!")
+            else:
+                print(f"Error: expected '{expected}', but got '{last_action}'. Retrying...")
 
 
 def main(args=None):
