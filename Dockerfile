@@ -1,7 +1,8 @@
 FROM ros:humble
 SHELL ["/bin/bash", "-c"]
 
-ENV ROS_DISTRrO=humble
+
+ENV ROS_DISTRO=humble
 
 ENV SOURCE_DIR=/app/driving
 ENV ROBOT_TYPE=duckiebot
@@ -31,7 +32,7 @@ WORKDIR /app
 RUN rosdep install -q -y -r --from-path . --rosdistro $ROS_DISTRO
 
 RUN apt install nano -y
-RUN pip3 install ultralytics
+
 
 RUN source ${ROS2_SOURCE} && colcon build --parallel-workers ${PARALLEL_WORKERS}
 
