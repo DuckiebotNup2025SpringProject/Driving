@@ -129,8 +129,8 @@ class MasterNode(Node):
         elif task[0] == "S":
             self.next_node = task[1:]
             self.target = Target.MOVING
-        elif task[:4] == "TURN":
-            self.turning_angle = task[4:]
+        elif task[:1] == "T":
+            self.turning_angle = task[1:]
             self.target = Target.TURNING
 
 
