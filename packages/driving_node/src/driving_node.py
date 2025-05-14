@@ -5,7 +5,7 @@ import rclpy
 from numpy.ma.core import argmin
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, String
 from cv_bridge import CvBridge
 import numpy as np
 from scipy.interpolate import CubicSpline
@@ -41,7 +41,8 @@ class DrivingNode(Node):
 
     # Initiation of the node and creating the subscriptions and publishers
     def __init__(self):
-        self.calibrator = cb.Corrector()
+        self.master_flag = False
+        self.corrector = cb.Corrector()
         self.x = X_BASE
         self.y = Y_BASE
         self.theta = 0
@@ -58,6 +59,9 @@ class DrivingNode(Node):
         self.motor_topic = f'/{bot_name}/wheels_cmd'
         self.segmentation_topic = f'/{bot_name}/mask'
         self.points_topic = f'/{bot_name}/mask/debug/points'
+        self.sideline_topic = f'/{bot_name}/mask/debug/sidelines'
+        self.master_commands_topic = f'/{bot_name}/master_commands'
+        self.master_callbacks_topic = f'/{bot_name}/master_callbacks'
 
         # Set up the image subscriber
         self.image_subscription = self.create_subscription(
@@ -72,10 +76,26 @@ class DrivingNode(Node):
             self.motor_topic,
             1)
 
+        self.master_cmd = self.create_subscription(
+            String,
+            self.master_commands_topic,
+            self.master_callback,
+            1)
+
+        self.master_feedback = self.create_publisher(
+            String,
+            self.master_callbacks_topic,
+            1)
+
         if DEBUG:
             self.points_pub = self.create_publisher(
                 Float32MultiArray,
                 self.points_topic,
+                1)
+
+            self.sideline_pub = self.create_publisher(
+                Float32MultiArray,
+                self.sideline_topic,
                 1)
 
         # CV bridge for converting ROS images to OpenCV format
@@ -88,22 +108,30 @@ class DrivingNode(Node):
 
         self.timer = self.create_timer(1 / MOTOR_PUB_RATE, self.send_motor_commands)
 
+
+    def master_callback(self, msg):
+        self.get_logger().info(f'Master command received: {msg.data}')
+        if msg.data == 'STRAIGHT':
+            self.get_logger().info('Starting the driving')
+            self.master_flag = True
+
     # IDK why do i need this function
     def feedback_callback(self, feedback):
         self.get_logger().info('Feedback: {0}'.format(feedback.feedback.sequence))
 
     # This is recieve the mask and saving it localy in the right format
     def mask_callback(self, msg):
-        self.get_logger().info('Mask was received')
-        try:
-            # Convert ROS Image message to OpenCV image
-            # Assuming the mask is already a binary image
-            self.mask = self.bridge.compressed_imgmsg_to_cv2(msg)
+        if self.master_flag:
+            self.get_logger().info('Mask was received')
+            try:
+                # Convert ROS Image message to OpenCV image
+                # Assuming the mask is already a binary image
+                self.mask = self.bridge.compressed_imgmsg_to_cv2(msg)
 
-        except Exception as e:
-            self.get_logger().error(f'Error processing mask: {str(e)}')
+            except Exception as e:
+                self.get_logger().error(f'Error processing mask: {str(e)}')
 
-        self.start_moving()
+            self.start_moving()
 
     # Initiation of the
     def start_moving(self):
@@ -137,15 +165,16 @@ class DrivingNode(Node):
             else:
                 vel_right = -1.0
             vel_right = max(-1.0, min(1.0, vel_right))
-        motor_msg = WheelsCmdStamped()
-        motor_msg.vel_left = float(vel_left)
-        motor_msg.vel_right = float(vel_right)
-        self.get_logger().info('Sending wheels commands to ros !!!!')
-        try:
-            self.motor_publisher.publish(motor_msg)
-            self.get_logger().debug(f'Published motor values: [{vel_left}, {vel_right}]')
-        except Exception as e:
-            self.get_logger().error(f'Error publishing motor values: {str(e)}')
+        if self.master_flag:
+            motor_msg = WheelsCmdStamped()
+            motor_msg.vel_left = float(vel_left)
+            motor_msg.vel_right = float(vel_right)
+            self.get_logger().info('Sending wheels commands to ros !!!!')
+            try:
+                self.motor_publisher.publish(motor_msg)
+                self.get_logger().debug(f'Published motor values: [{vel_left}, {vel_right}]')
+            except Exception as e:
+                self.get_logger().error(f'Error publishing motor values: {str(e)}')
 
     def vector_calc(self, points):
 
@@ -173,11 +202,12 @@ class DrivingNode(Node):
         return get_lookahead_point
 
     def send_motor_commands(self):
-        self.get_logger().info('Calculating motor values')
-        vel_left, vel_right = self.calculate_motor_values()
-        self.get_logger().info('Start of motor publishing')
-        self.motor_pub(vel_left, vel_right)
-        self.get_logger().info(f'Sending was successfully made  AA')
+        if self.master_flag:
+            self.get_logger().info('Calculating motor values')
+            vel_left, vel_right = self.calculate_motor_values()
+            self.get_logger().info('Start of motor publishing')
+            self.motor_pub(vel_left, vel_right)
+            self.get_logger().info(f'Sending was successfully made  AA')
 
     def _oneline(self, x, y, slope, ratio):
         dx, dy = 1, slope
@@ -250,6 +280,14 @@ class DrivingNode(Node):
                 yellow = np.argwhere(mask_block == 2)
                 white = np.argwhere(mask_block == 1)
                 # if there are more than 30% of the block in the color, then we consider that the color is present
+                if x_block == height - step and width * 0.4 <= y_block <= width * 0.6:
+                    if len(np.argwhere(mask_block == 3)) > block * step * 0.3:
+                        msg = String()
+                        msg.data = 'SUCCESS'
+                        self.master_feedback.publish(msg)
+                        self.master_flag = False
+                        self.get_logger().info('Sent to master SUCCESS')
+                        return []
                 if len(yellow) > block * step * 0.3:
                     y_flag = True
                     yellow_line.append(np.mean(yellow, axis=0) +
@@ -285,20 +323,36 @@ class DrivingNode(Node):
         wl_flag = False
         wr_flag = False
         if len(y_line) >= 5:
-            y_line = self.corrector.map_camera_to_plane(y_line)
-            y_coeffs = np.polyfit(np.array(y_line)[:, 0], np.array(y_line)[:, 1], 2)
+            y_line_u = self.corrector.map_camera_to_plane(y_line)
+            y_coeffs = np.polyfit(np.array(y_line_u)[:, 0], np.array(y_line_u)[:, 1], 2)
             y_poly = np.poly1d(y_coeffs)
             y_flag = True
         if len(wl_line) >= 5:
-            wl_line = self.corrector.map_camera_to_plane(wl_line)
-            wl_coeffs = np.polyfit(np.array(wl_line)[:, 0], np.array(wl_line)[:, 1], 2)
+            wl_line_u = self.corrector.map_camera_to_plane(wl_line)
+            wl_coeffs = np.polyfit(np.array(wl_line_u)[:, 0], np.array(wl_line_u)[:, 1], 2)
             wl_poly = np.poly1d(wl_coeffs)
             wl_flag = True
         if len(wr_line) >= 5:
-            wr_line = self.corrector.map_camera_to_plane(wr_line)
-            wr_coeffs = np.polyfit(np.array(wr_line)[:, 0], np.array(wr_line)[:, 1], 2)
+            wr_line_u = self.corrector.map_camera_to_plane(wr_line)
+            wr_coeffs = np.polyfit(np.array(wr_line_u)[:, 0], np.array(wr_line_u)[:, 1], 2)
             wr_poly = np.poly1d(wr_coeffs)
             wr_flag = True
+        if DEBUG:
+            lines_points = []
+            if y_flag:
+                lines_points.extend(list(np.array(y_line).reshape(-1)))
+                lines_points.extend([-1.0, -1.0])
+            if wl_flag:
+                lines_points.extend(list(np.array(wl_line).reshape(-1)))
+                lines_points.extend([-1.0, -1.0])
+            if wr_flag:
+                lines_points.extend(list(np.array(wr_line).reshape(-1)))
+                lines_points.extend([-1.0, -1.0])
+
+            self.get_logger().info(f'Lines points: {lines_points}')
+            msg = Float32MultiArray()
+            msg.data = lines_points
+            self.sideline_pub.publish(msg)
 
         if not (y_flag or wl_flag or wr_flag):
             self.get_logger().info('No lines were found')
