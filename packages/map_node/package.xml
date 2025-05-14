@@ -1,11 +1,12 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>apriltag_node</name>
+  <name>map_node</name>
   <version>0.0.0</version>
-  <description>Node for apriltag parsing</description>
+  <description>Node for map</description>
   <maintainer email="artem.s.grigorash@gmail.com">Artem.Grigorash</maintainer>
   <license>MIT</license>
+
   <export>
     <build_type>ament_python</build_type>
   </export>
