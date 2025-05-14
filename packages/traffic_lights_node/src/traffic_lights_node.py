@@ -4,7 +4,6 @@ import os
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage, Range
-from traffic_lights_msgs.srv import GetTrafficLightSignal
 from std_msgs.msg import String
 from cv_bridge import CvBridge
 import requests
@@ -44,6 +43,8 @@ class TrafficLightsNode(Node):
         self.bridge = CvBridge()
         self.image_topic = f'/{bot_name}/image/compressed'
         self.recognition_service_name = f"/{bot_name}/recognition"
+        self.master_commands_topic = f'/{bot_name}/master_commands'
+        self.master_callbacks_topic = f'/{bot_name}/master_callbacks'
         self.should_recognize = False
 
         try:
@@ -56,12 +57,24 @@ class TrafficLightsNode(Node):
             self.get_logger().error(f'Error while subscribing to segmentation {e}')
 
         try:
-            self.recognition_service = self.create_service(
-                GetTrafficLightSignal,
-                self.recognition_service_name,
-                self.recognize_req)
+            self.master_subscription = self.create_subscription(
+                String,
+                self.master_commands_topic,
+                self.may_be_call,
+                10
+            )
         except Exception as e:
-            self.get_logger().error(f'Error while creating service {e}')
+            self.get_logger().error(f'Error while subscribing to master {e}')
+
+        # "no_traffic_lights" or "Forward-{bool}, Left-{bool}, Right-{bool}"
+        try:
+            self.master_publisher = self.create_publisher(
+                String,
+                self.master_callbacks_topic,
+                10
+            )
+        except Exception as e:
+            self.get_logger().error(f'Error while publishing master {e}')
 
         # Logs about node start up
         self.get_logger().info(f'Node initialized for {bot_name}')
@@ -76,24 +89,39 @@ class TrafficLightsNode(Node):
         except Exception as e:
             self.get_logger().error(f'Error while converting image {e}')
 
-    def recognize_req(self, req, res):
-        self.should_recognize = req.data
-        self.get_logger().info(f'Received recognition request {str(req.data)}')
+    def may_be_call(self, msg):
+        data = str(msg.data)
+        if data == "TRAFFIC":
+            res = self.recognize_req()
+            self.master_publisher.publish(res)
+
+
+    def recognize_req(self):
+        self.get_logger().info(f'Received recognition request')
         ans = self.recognize_model()
         count = 1
+        res = String()
         while (ans[0] == "again" or ans == "again") and count < 2:
             count += 1
             self.png_buffer = cv2.flip(self.png_buffer, 1)
             ans = self.recognize_model()
         if (ans[0] == "again" or ans == "again"):
             self.get_logger().info(f'No traffic lights detected')
-            an = String()
-            an.data = str({"result": "no_traffic_lights"})
-            res.signal_json = an
+            an = "no_traffic_lights"
+            res.data = an
         else:
             an = String()
-            an.data = str({"result": {"main": ans[0], "left": "l" in ans[1], "right": "r" in ans[1]}})
-            res.signal_json = an
+            forw = False
+            left = False
+            right = False
+            if ans[0] == "g":
+                forw = True
+            if "l" in ans[1]:
+                left = True
+            if "r" in ans[1]:
+                right = True
+            an.data = f"Forward-{forw}, Left-{left}, Right-{right}"
+            res.data = an
         return res
 
     def recognize_model(self):
