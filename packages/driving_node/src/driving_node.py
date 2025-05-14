@@ -10,7 +10,7 @@ from cv_bridge import CvBridge
 import numpy as np
 from scipy.interpolate import CubicSpline
 from numpy import cos, sin
-
+import calibration as cb
 from duckietown_msgs.msg import WheelsCmdStamped
 
 #//////////////////////////////////////////////////////////////////////////////////////
@@ -26,7 +26,7 @@ FRAMERATE = 28              # Create a reading from node if there exit a node, t
 USE_MAX_SPEED = False       # This flag will mean, that speed of one of the motors will be always 1.
 MOTOR_PUB_RATE = 100        # How many times should be send motor coefficients per second
 
-X_BASE, Y_BASE = -30.0, 0.0   # Base coordinates for the robot (middle of the chassis) TODO: Calculate and change it in Production
+X_BASE, Y_BASE = 0.0, 0.0   # Base coordinates for the robot (middle of the chassis) TODO: Calculate and change it in Production
 BASE_WIDTH = 100            # Base width of the robot TODO: Calculate and change it in Production
 
 # Vars for processing the drive function
@@ -35,12 +35,13 @@ MAX_SPEED = 100               # TODO: This is testing value. Change it in Produc
 SPEED_KOEF = 0.4            # Relative value to motor speed. For batter performance may be controlled through nodes
 ANGLE_KOEF = 0.5            # How strong will the difference in angles will be affect the rotation of the robot
 
-ROAD_SIZE = 10
+ROAD_SIZE = 25
 
 class DrivingNode(Node):
 
     # Initiation of the node and creating the subscriptions and publishers
     def __init__(self):
+        self.calibrator = cb.Corrector()
         self.x = X_BASE
         self.y = Y_BASE
         self.theta = 0
@@ -284,14 +285,17 @@ class DrivingNode(Node):
         wl_flag = False
         wr_flag = False
         if len(y_line) >= 5:
+            y_line = self.corrector.map_camera_to_plane(y_line)
             y_coeffs = np.polyfit(np.array(y_line)[:, 0], np.array(y_line)[:, 1], 2)
             y_poly = np.poly1d(y_coeffs)
             y_flag = True
         if len(wl_line) >= 5:
+            wl_line = self.corrector.map_camera_to_plane(wl_line)
             wl_coeffs = np.polyfit(np.array(wl_line)[:, 0], np.array(wl_line)[:, 1], 2)
             wl_poly = np.poly1d(wl_coeffs)
             wl_flag = True
         if len(wr_line) >= 5:
+            wr_line = self.corrector.map_camera_to_plane(wr_line)
             wr_coeffs = np.polyfit(np.array(wr_line)[:, 0], np.array(wr_line)[:, 1], 2)
             wr_poly = np.poly1d(wr_coeffs)
             wr_flag = True
@@ -340,7 +344,6 @@ class DrivingNode(Node):
             msg = Float32MultiArray()
             msg.data = point_for_pub
             self.points_pub.publish(msg)
-
 
         return points
 
