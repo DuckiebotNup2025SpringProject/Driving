@@ -7,6 +7,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
+from std_msgs.msg import String
 
 
 class AprilTagNode(Node):
@@ -18,19 +19,25 @@ class AprilTagNode(Node):
             bot_name = "example_robot"
         super().__init__('apriltag_node')
         self.bot_name = bot_name
-        self.apriltag_topic = f'/{bot_name}/image/compressed'
+        self.image_topic = f'/{bot_name}/image/compressed'
+        self.apriltag_topic = f'/{bot_name}/apriltag'
 
         self.image_subscription = self.create_subscription(
             CompressedImage,
-            self.apriltag_topic,
+            self.image_topic,
             self.parse_apriltag,
+            10)
+
+        self.apriltag_publisher = self.create_publisher(
+            String,
+            self.apriltag_topic,
             10)
 
         self.get_logger().info(f'Node initialized for {bot_name}')
         self.get_logger().info(f'Publishing to {self.apriltag_topic}')
         self.actual_image = 0
 
-        self.timer = self.create_timer(5, lambda: self.get_result(self.actual_image))
+        self.timer = self.create_timer(1, lambda: self.get_result(self.actual_image))
 
     def parse_apriltag(self, msg):
         try:
@@ -66,6 +73,7 @@ class AprilTagNode(Node):
             focal_length_mm = 300
             tag_size_mm = 65
 
+            tags = {}
             # Display information about the detected tags
             for tag in results:
                 self.get_logger().info("------------------------------------------------")
@@ -73,8 +81,13 @@ class AprilTagNode(Node):
                 tag_width_pixels = np.linalg.norm(tag.corners[0] - tag.corners[3])
                 distance_mm = (focal_length_mm * tag_size_mm) / tag_width_pixels
                 self.get_logger().info("Distance to tag: " + str(distance_mm) + " mm")
-
+                if distance_mm < 700:
+                    tags[tag.tag_id] = distance_mm
+            msg = String()
+            msg.data = str(min(tags, key=tags.get))
+            self.apriltag_publisher.publish(msg)
             self.get_logger().info("Detection completed successfully")
+
 
         except Exception:
             self.get_logger().error("Error obtaining detection results")
