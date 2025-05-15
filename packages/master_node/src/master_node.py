@@ -36,7 +36,7 @@ class MasterNode(Node):
 
         self.mode = DrivingMode.AUTONOMOUS
         self.target = Target.MOVING
-        self.tasks_list = deque()
+        self.tasks_list = deque(["T270", "S", "T0", "S", "T90", "S"])
         self.turning_angle = ""
         self.next_node = ""
         self.last_command = "S"
@@ -79,7 +79,7 @@ class MasterNode(Node):
             self.get_logger().error("Error parsing tag")
 
     def add_route(self, msg):
-        self.tasks_list = deque(msg.data.split(','))
+        # self.tasks_list = deque(msg.data.split(','))
         self.mode = DrivingMode.AUTONOMOUS
 
     def action(self):
