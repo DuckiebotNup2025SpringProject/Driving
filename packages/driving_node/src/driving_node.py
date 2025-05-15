@@ -32,7 +32,7 @@ BASE_WIDTH = 100            # Base width of the robot TODO: Calculate and change
 LOOKAHEAD = 100             # How many poits
 MAX_SPEED = 100               # TODO: This is testing value. Change it in Production
 SPEED_KOEF = 0.5            # Relative value to motor speed. For batter performance may be controlled through nodes
-ANGLE_KOEF = 1.2            # How strong will the difference in angles will be affect the rotation of the robot
+ANGLE_KOEF = 0.7            # How strong will the difference in angles will be affect the rotation of the robot
 
 class DrivingNode(Node):
 
