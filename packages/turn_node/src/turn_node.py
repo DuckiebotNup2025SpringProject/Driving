@@ -67,7 +67,11 @@ class TurnNode(Node):
 
         self.active_mode = None
 
+        self.get_logger().info('Initializing node')
+        self.get_logger().info(f'Topics {self.master_commands_topic} {self.master_callbacks_topic}')
+
     def master_cmd_cb(self, msg: String):
+        self.get_logger().info(f'Received command: {msg.data}')
         if msg.data not in ['TURN0', 'TURN90', 'TURN270']:
             return
 

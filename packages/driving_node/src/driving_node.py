@@ -8,7 +8,6 @@ from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float32MultiArray, String
 from cv_bridge import CvBridge
 import numpy as np
-from scipy.interpolate import CubicSpline
 from numpy import cos, sin
 
 from duckietown_msgs.msg import WheelsCmdStamped
@@ -21,7 +20,7 @@ from duckietown_msgs.msg import WheelsCmdStamped
 
 
 # TODO: Import this constants from ROS config
-DEBUG = True                # Debug flag # TODO: Change it in Production
+DEBUG = False                # Debug flag # TODO: Change it in Production
 FRAMERATE = 28              # Create a reading from node if there exit a node, that is outputting it to batter performance.
 USE_MAX_SPEED = False       # This flag will mean, that speed of one of the motors will be always 1.
 MOTOR_PUB_RATE = 100        # How many times should be send motor coefficients per second
@@ -39,7 +38,7 @@ class DrivingNode(Node):
 
     # Initiation of the node and creating the subscriptions and publishers
     def __init__(self):
-        self.master_flag = True
+        self.master_flag = False
         self.x = X_BASE
         self.y = Y_BASE
         self.theta = 0
@@ -76,7 +75,7 @@ class DrivingNode(Node):
             String,
             self.master_commands_topic,
             self.master_callback,
-            1)
+            10)
 
         self.master_feedback = self.create_publisher(
             String,
