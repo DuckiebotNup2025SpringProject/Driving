@@ -6,6 +6,7 @@ from enum import Enum
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from sympy.codegen.ast import continue_
 
 
 class DrivingMode(Enum):
@@ -114,7 +115,22 @@ class MasterNode(Node):
                 if self.last_command[1:] != self.last_apriltag:
                     self.get_logger().info(f'Error, turned to manual mode')
                     self.mode = DrivingMode.MANUAL
-
+        elif msg.data == "no_traffic_lights":
+            pass
+        elif msg.data[:7] == "Forward":
+            data = msg.data
+            data = data.split(', ')
+            forward = bool(data[0][7:])
+            left = bool(data[0][4:])
+            right = bool(data[0][5:])
+            if (self.last_command == "T0" and forward) or (self.last_command == "T90" and right) or (
+                    self.last_command == "T270" and left):
+                pass
+            else:
+                msg = String()
+                msg.data = "TRAFFIC"
+                self.master_publisher.publish(msg)
+                return
             if self.tasks_list:
                 self.evaluate_task(self.tasks_list.popleft())
             else:
