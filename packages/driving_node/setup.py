@@ -25,8 +25,6 @@ setup(
     license='GPLv3',
     entry_points={
         'console_scripts': [
-            # TODO: Write an console scripts for this node
-            # 'driving_node = driving_node.driving_node:main',
         ],
     },
 )
