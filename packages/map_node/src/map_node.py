@@ -18,7 +18,7 @@ class MapNode(Node):
         self.bot_name = bot_name
         self.apriltag_topic = f'/{bot_name}/apriltag'
         self.route_topic = f'/{bot_name}/route'
-        self.actual_tag = 243
+        self.actual_tag = 245
 
         self.apriltag_subscription = self.create_subscription(
             String,
@@ -38,20 +38,20 @@ class MapNode(Node):
 
         self.town_map = nx.Graph()
 
-        self.town_map.add_node('A', tags=[148, 145, 146, 151])
-        self.town_map.add_node('B', tags=[147, 137, 0, 160])
-        self.town_map.add_node('J', tags=[134, 0, 159, 243])
-        self.town_map.add_node('D', tags=[0, 156, 149, 238])
-        self.town_map.add_node('E', tags=[245, 150, 244, 0])
+        self.town_map.add_node('A', tags=[148, 151, 146, 145])
+        self.town_map.add_node('B', tags=[147, 160, 0, 137])
+        self.town_map.add_node('J', tags=[134, 243, 159, 0])
+        self.town_map.add_node('D', tags=[0, 238, 149, 156])
+        self.town_map.add_node('E', tags=[245, 0, 244, 150])
 
-        self.town_map.add_edge('A', 'E', first_tag='151', second_tag='150')
-        self.town_map.add_edge('A', 'D', first_tag='148', second_tag='149')
-        self.town_map.add_edge('A', 'J', first_tag='145', second_tag='243')
-        self.town_map.add_edge('A', 'B', first_tag='146', second_tag='147')
-        self.town_map.add_edge('B', 'E', first_tag='160', second_tag='244')
-        self.town_map.add_edge('E', 'D', first_tag='245', second_tag='238')
-        self.town_map.add_edge('J', 'D', first_tag='134', second_tag='156')
-        self.town_map.add_edge('J', 'B', first_tag='159', second_tag='137')
+        self.town_map.add_edge('A', 'E', first_tag='150', second_tag='151', weight=1)
+        self.town_map.add_edge('A', 'D', first_tag='149', second_tag='148', weight=1)
+        self.town_map.add_edge('A', 'J', first_tag='243', second_tag='145', weight=1)
+        self.town_map.add_edge('A', 'B', first_tag='147', second_tag='146', weight=1)
+        self.town_map.add_edge('B', 'E', first_tag='244', second_tag='160', weight=1)
+        self.town_map.add_edge('E', 'D', first_tag='238', second_tag='245', weight=1)
+        self.town_map.add_edge('J', 'D', first_tag='156', second_tag='134', weight=1)
+        self.town_map.add_edge('J', 'B', first_tag='137', second_tag='159', weight=1)
 
         self.send_route()
 
@@ -188,7 +188,7 @@ class MapNode(Node):
         3) Constructs the route and outputs the sequence of commands.
         4) Monitors execution, expecting exact reports for each command.
         """
-        destination = "K"
+        destination = "J"
         last_action = "S" + str(self.actual_tag)
         if not last_action.startswith("S"):
             print("Error: the first action must be a stop report 'S<tag>'")

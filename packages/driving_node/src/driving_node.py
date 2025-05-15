@@ -39,7 +39,7 @@ class DrivingNode(Node):
 
     # Initiation of the node and creating the subscriptions and publishers
     def __init__(self):
-        self.master_flag = True
+        self.master_flag = False
         self.x = X_BASE
         self.y = Y_BASE
         self.theta = 0
