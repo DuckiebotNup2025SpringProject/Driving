@@ -36,10 +36,11 @@ class TrafficLightsNode(Node):
             self.get_logger().error('Bot name not specified')
 
         try:
-            self.bot_name = os.getenv('VEHICLE_NAME')
-        except Exception as e:
+            bot_name = os.getenv('VEHICLE_NAME')
+        except Exception:
             self.get_logger().error('Bot name not specified')
-            self.bot_name = bot_name
+            bot_name = "example_robot"
+        self.bot_name = bot_name
         self.bridge = CvBridge()
         self.image_topic = f'/{bot_name}/image/compressed'
         self.recognition_service_name = f"/{bot_name}/recognition"
@@ -90,6 +91,7 @@ class TrafficLightsNode(Node):
             self.get_logger().error(f'Error while converting image {e}')
 
     def may_be_call(self, msg):
+        self.get_logger().info(f'Received {msg.data}')
         data = str(msg.data)
         if data == "TRAFFIC":
             res = self.recognize_req()
@@ -237,7 +239,7 @@ class TrafficLightsNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    image_processor = TrafficLightsNode(bot_name="duckie02")
+    image_processor = TrafficLightsNode()
     rclpy.spin(image_processor)
     rclpy.shutdown()
 

@@ -34,12 +34,12 @@ class MasterNode(Node):
         self.route_topic = f'/{bot_name}/route'
         self.apriltag_topic = f'/{bot_name}/apriltag'
 
-        self.mode = DrivingMode.MANUAL
+        self.mode = DrivingMode.AUTONOMOUS
         self.target = Target.MOVING
         self.tasks_list = deque()
         self.turning_angle = ""
         self.next_node = ""
-        self.last_command = ""
+        self.last_command = "S"
         self.last_apriltag = ""
 
         self.get_logger().info(f'Node initialized for {bot_name}')
@@ -67,7 +67,7 @@ class MasterNode(Node):
             self.master_commands_topic,
             10)
 
-        self.action_timer = self.create_timer(0.1, lambda: self.action())
+        self.action_timer = self.create_timer(0.3, lambda: self.action())
 
     def parse_tag(self, msg):
         try:
@@ -83,11 +83,13 @@ class MasterNode(Node):
         self.mode = DrivingMode.AUTONOMOUS
 
     def action(self):
+        self.get_logger().error("Action started" + str(self.target))
         if self.mode == DrivingMode.AUTONOMOUS:
             if self.target == Target.MOVING:
                 msg = String()
                 msg.data = "STRAIGHT"
                 self.master_publisher.publish(msg)
+                self.get_logger().error("Message straight published")
                 self.target = Target.PAUSED
             elif self.target == Target.TURNING:
                 msg = String()
@@ -117,7 +119,6 @@ class MasterNode(Node):
                 self.evaluate_task(self.tasks_list.popleft())
             else:
                 self.get_logger().info(f'Task is completed, turned to manual mode')
-                self.mode = DrivingMode.MANUAL
         else:
             self.get_logger().info(f'Error, turned to manual mode')
             self.mode = DrivingMode.MANUAL
